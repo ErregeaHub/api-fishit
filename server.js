@@ -1,7 +1,7 @@
 // Import Libraries
 const express = require("express");
 const axios = require("axios");
-const cors = require = require("cors");
+const cors = require("cors"); // Perbaikan: Pastikan syntax require benar
 const dotenv = require("dotenv");
 
 dotenv.config();
@@ -10,8 +10,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Set Port and Host Binding
-const PORT = process.env.PORT || 8080;
+// Set Port dan Host Binding
+// Mengubah fallback port menjadi 3001
+const PORT = process.env.PORT || 3001; 
 
 // **********************************************
 // ** PENTING: Health Check untuk Railway/Deployment **
@@ -21,25 +22,12 @@ app.get("/", (req, res) => {
 });
 // **********************************************
 
-// Set HEADERS: Membuat header Cookie untuk otentikasi ke Roblox.
-// Cookie yang dikirim oleh frontend HANYA berupa nilai token-nya saja.
-const getHeaders = (cookie) => {
-    // Memastikan cookie ada dan menyertakan awalan .ROBLOSECURITY=
-    return cookie ? { 
-        Cookie: `.ROBLOSECURITY=${cookie}`,
-        "Content-Type": "application/json" // Penting untuk POST requests ke Roblox
-    } : {
-        "Content-Type": "application/json"
-    };
-};
-
 /**
  * Mengambil User ID untuk daftar username.
  */
 async function getUserIds(usernames) {
     if (usernames.length === 0) return {};
     
-    // Pecah username menjadi beberapa bagian (chunk) agar tidak melebihi batas API (maks 100)
     const chunks = [];
     for (let i = 0; i < usernames.length; i += 100) {
         chunks.push(usernames.slice(i, i + 100));
@@ -51,9 +39,8 @@ async function getUserIds(usernames) {
             const resp = await axios.post(
                 "https://users.roblox.com/v1/usernames/users",
                 { usernames: chunk },
-                { headers: { "Content-Type": "application/json" } } // Tidak perlu cookie di sini
+                { headers: { "Content-Type": "application/json" } }
             );
-            // Map username (lowercase) ke User ID
             resp.data.data.forEach(user => {
                 userMap[user.name.toLowerCase()] = user.id;
             });
@@ -81,15 +68,23 @@ async function getGameInfo(id, cookie) {
         return placeData?.name || "Unknown Place";
     } catch (err) {
         // Jika gagal, mungkin karena cookie tidak memiliki akses ke info game
-        return "Unknown Place (Access Denied or Game Info Failed)";
+        return "Unknown Place (Access Denied atau Game Info Failed)";
     }
 }
 
+// Set HEADERS: Membuat header Cookie untuk otentikasi ke Roblox.
+const getHeaders = (cookie) => {
+    return cookie ? { 
+        Cookie: `.ROBLOSECURITY=${cookie}`,
+        "Content-Type": "application/json"
+    } : {
+        "Content-Type": "application/json"
+    };
+};
+
 // *** ENDPOINT UTAMA ***
 app.post("/api/status", async (req, res) => {
-    // Cookie diambil dari header khusus 'x-roblox-cookie' yang dikirim oleh frontend
     const cookie = req.headers['x-roblox-cookie'];
-    // Username diambil dari body request (req.body.users)
     const users = req.body.users;
     
     if (!users || users.length === 0) {
@@ -106,7 +101,7 @@ app.post("/api/status", async (req, res) => {
     // 3. Get Presence for all valid users in one API call
     const presenceBody = { userIds: validUserIds };
     let presenceData = { userPresences: [] };
-    const headers = getHeaders(cookie); // Menggunakan cookie
+    const headers = getHeaders(cookie);
 
     if (validUserIds.length > 0) {
         try {
@@ -114,28 +109,21 @@ app.post("/api/status", async (req, res) => {
              presenceData = resp.data;
         } catch (e) {
              console.error("Presence API failed:", e.message);
-             // JIKA error adalah 403 (Forbidden), kemungkinan cookie tidak valid
              if (e.response && e.response.status === 403) {
                  return res.status(403).json({ error: "Cookie Roblox tidak valid atau tidak memiliki izin akses." });
              }
-             // Jika error lain, kirim error umum
              return res.status(500).json({ error: "Gagal memuat status dari Roblox." });
         }
     }
     
-    // 4. Gather all results (Logic sama seperti sebelumnya)
-    
-    // *** PERBAIKAN: Buat presenceMap dari array userPresences ***
-    // Ini memungkinkan pencarian status berdasarkan userId dengan cepat.
+    // PERBAIKAN: Buat presenceMap dari array userPresences
     const presenceMap = presenceData.userPresences.reduce((map, presence) => {
         map[presence.userId] = presence;
         return map;
     }, {});
-    // ************************************************************
-
+    
     const results = [];
     
-    // Buat map kebalikan dari ID ke Username (untuk hasil akhir)
     const userIdToUsernameMap = Object.entries(userMap).reduce((acc, [username, id]) => {
         acc[id] = username;
         return acc;
@@ -166,7 +154,6 @@ app.post("/api/status", async (req, res) => {
             
             if (presence.userPresenceType === 3) { // In Game
                 status = "In Game";
-                // Mengambil nama game
                 mapName = await getGameInfo(presence.universeId || presence.placeId, cookie);
                 if (!presence.placeId) {
                      mapName = "In Game (placeId hidden)";
