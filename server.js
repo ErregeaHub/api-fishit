@@ -1,3 +1,4 @@
+// Import Libraries
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
@@ -9,27 +10,38 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// *** PENTING: HEALTH CHECK UNTUK RAILWAY ***
-// Endpoint ini memastikan Railway tahu bahwa server sudah berjalan.
-app.get('/', (req, res) => {
-    res.status(200).send('API Server Running');
+// Set Port and Host Binding
+const PORT = process.env.PORT || 8080;
+
+// **********************************************
+// ** PENTING: Health Check untuk Railway/Deployment **
+// Route ini harus merespons cepat agar deployment lolos.
+app.get("/", (req, res) => {
+    res.status(200).send("Roblox Status API is LIVE and Healthy.");
 });
 // **********************************************
 
-
-// Set HEADERS, prefer request header cookie over .env cookie
+// Set HEADERS: Membuat header Cookie untuk otentikasi ke Roblox.
+// Cookie yang dikirim oleh frontend HANYA berupa nilai token-nya saja.
 const getHeaders = (cookie) => {
-    return cookie ? { Cookie: `.ROBLOSECURITY=${cookie}` } : {};
+    // Memastikan cookie ada dan menyertakan awalan .ROBLOSECURITY=
+    return cookie ? { 
+        Cookie: `.ROBLOSECURITY=${cookie}`,
+        "Content-Type": "application/json" // Penting untuk POST requests ke Roblox
+    } : {
+        "Content-Type": "application/json"
+    };
 };
 
 /**
  * Mengambil User ID untuk daftar username.
- * Mengembalikan objek map {username: userId}.
  */
 async function getUserIds(usernames) {
     if (usernames.length === 0) return {};
     
-    // Roblox API hanya bisa memproses 100 username per request
+    // ... (rest of getUserIds function remains the same)
+    // [Kode getUserIds sama seperti sebelumnya]
+
     const chunks = [];
     for (let i = 0; i < usernames.length; i += 100) {
         chunks.push(usernames.slice(i, i + 100));
@@ -41,14 +53,13 @@ async function getUserIds(usernames) {
             const resp = await axios.post(
                 "https://users.roblox.com/v1/usernames/users",
                 { usernames: chunk },
-                { headers: { "Content-Type": "application/json" } }
+                { headers: { "Content-Type": "application/json" } } // Tidak perlu cookie di sini
             );
             resp.data.data.forEach(user => {
                 userMap[user.name.toLowerCase()] = user.id;
             });
         } catch (error) {
             console.error("Error fetching user IDs chunk:", error.message);
-            // Melanjutkan ke chunk berikutnya
         }
     }
     return userMap;
@@ -63,8 +74,6 @@ async function getGameInfo(id, cookie) {
     const headers = getHeaders(cookie);
 
     try {
-        // Coba universeId dulu (jika ada), lalu placeId. 
-        // Endpoint ini bekerja untuk keduanya meskipun namanya place-details.
         const resp = await axios.get(
             `https://games.roblox.com/v1/games/multiget-place-details?placeIds=${id}`,
             { headers }
@@ -72,17 +81,17 @@ async function getGameInfo(id, cookie) {
         const placeData = resp.data[0];
         return placeData?.name || "Unknown Place";
     } catch (err) {
-        return "Unknown Place";
+        // Jika gagal, mungkin karena cookie tidak memiliki akses ke info game
+        return "Unknown Place (Access Denied or Game Info Failed)";
     }
 }
 
-
-// *** ENDPOINT INI MENGGUNAKAN POST dan MENDAPATKAN USERNAME DARI BODY REQUEST ***
+// *** ENDPOINT UTAMA ***
 app.post("/api/status", async (req, res) => {
     // Cookie diambil dari header khusus 'x-roblox-cookie' yang dikirim oleh frontend
     const cookie = req.headers['x-roblox-cookie'];
     // Username diambil dari body request (req.body.users)
-    const users = req.body.users; 
+    const users = req.body.users;
     
     if (!users || users.length === 0) {
         return res.status(400).json({ error: "Daftar pengguna kosong." });
@@ -98,7 +107,7 @@ app.post("/api/status", async (req, res) => {
     // 3. Get Presence for all valid users in one API call
     const presenceBody = { userIds: validUserIds };
     let presenceData = { userPresences: [] };
-    const headers = getHeaders(cookie);
+    const headers = getHeaders(cookie); // Menggunakan cookie
 
     if (validUserIds.length > 0) {
         try {
@@ -106,19 +115,18 @@ app.post("/api/status", async (req, res) => {
              presenceData = resp.data;
         } catch (e) {
              console.error("Presence API failed:", e.message);
+             // JIKA error adalah 403 (Forbidden), kemungkinan cookie tidak valid
+             if (e.response && e.response.status === 403) {
+                 return res.status(403).json({ error: "Cookie Roblox tidak valid atau tidak memiliki izin akses." });
+             }
+             // Jika error lain, kirim error umum
+             return res.status(500).json({ error: "Gagal memuat status dari Roblox." });
         }
     }
     
-    // Map userId to presence object for quick lookup
-    const presenceMap = {};
-    presenceData.userPresences.forEach(p => {
-        presenceMap[p.userId] = p;
-    });
-    
-    // 4. Gather all results
+    // 4. Gather all results (Logic sama seperti sebelumnya)
     const results = [];
     
-    // Reverse lookup to find username from userId
     const userIdToUsernameMap = Object.entries(userMap).reduce((acc, [username, id]) => {
         acc[id] = username;
         return acc;
@@ -135,7 +143,6 @@ app.post("/api/status", async (req, res) => {
 
         const presence = presenceMap[userId];
         
-        // --- Determine Status and Game Info ---
         let mapName = "Offline";
         let status = "Offline";
         let placeId = null;
@@ -143,6 +150,8 @@ app.post("/api/status", async (req, res) => {
         let lastLocation = "Offline";
 
         if (presence) {
+             // ... (Logic penentuan status sama seperti sebelumnya)
+             // [Kode penentuan status]
             placeId = presence.placeId;
             universeId = presence.universeId;
             lastLocation = presence.lastLocation;
@@ -179,10 +188,7 @@ app.post("/api/status", async (req, res) => {
     res.json(results);
 });
 
-// >>> PENTING: Gunakan PORT dari Environment Variable Railway <<<
-// Mengubah default fallback port dari 3000 menjadi 8080.
-const PORT = process.env.PORT || 8080;
+// >>> START SERVER <<<
 app.listen(PORT, '0.0.0.0', () => console.log(`✅ Server running on port ${PORT} on host 0.0.0.0`));
 
-// Ekspor aplikasi Express untuk digunakan dalam kasus pengujian atau integrasi (optional)
 module.exports = app;

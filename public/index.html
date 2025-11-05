@@ -80,7 +80,7 @@
             </div>
         </div>
 
-        <!-- STATISTIC BAR (NEWLY ADDED) -->
+        <!-- STATISTIC BAR -->
         <div id="statistic-bar" class="grid grid-cols-3 gap-4 mb-8">
             <div class="bg-gray-800 p-4 rounded-xl text-center shadow-md border-b-4 border-gray-600">
                 <p class="text-sm text-gray-400 font-medium">Total Akun</p>
@@ -100,33 +100,40 @@
         <!-- Status Results -->
         <h2 class="text-2xl font-bold text-gray-200 mb-4">Hasil Status Pengguna:</h2>
         <div id="results-container">
-            <!-- Loading and results will be injected here -->
             <div id="loading-indicator" class="hidden text-center p-8">
                 <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-roblox-blue mx-auto mb-3"></div>
                 <p class="text-gray-400">Memuat status dari server...</p>
             </div>
+            <p class="text-gray-400 text-center p-8">Klik "Mulai Tracking" untuk memuat data.</p>
         </div>
 
     </div>
 
     <script>
-        // API endpoint
+        // API endpoint Anda yang sudah di-deploy
         const API_URL = 'https://api-fishit-production.up.railway.app/api/status';
-        // Variabel untuk menyimpan ID interval refresh
+        
         let refreshIntervalId = null; 
-        // Waktu refresh dalam milidetik (15 detik)
         const REFRESH_RATE = 15000; 
 
-        /**
-         * Menampilkan pesan notifikasi di kotak pesan.
-         */
+        // DAFTAR PENGGUNA DUMMY (SESUAI DENGAN INPUT ANDA SEBELUMNYA)
+        const DUMMY_USERS = [
+            "Taloongoodboy", "Basoka001", "Basooka002", "Basooka003", 
+            "Basooka004", "nyukk1000", "nyukk1002", "nyukk10003", 
+            "kuya0600", "uubyyror", "talonbaikk63", "ermancing_1", 
+            "Duck_CHILL37", "Julian_Dawn72", "NovaPrism200531", 
+            "XxOw3nQu33nTurb0xX", "Fr0st_TIG3R53", "IsabellaFireBlade201", 
+            "StormMoonGolden79"
+        ];
+        
+        // --- UTILITY FUNCTIONS ---
+
         function showMessage(message, type = 'info') {
             const box = document.getElementById('message-box');
             box.textContent = message;
             box.className = 'mt-4 p-3 rounded-lg text-sm'; 
             box.classList.remove('hidden');
 
-            // Logic untuk pewarnaan pesan (sama seperti sebelumnya)
             switch (type) {
                 case 'success':
                     box.classList.add('bg-green-800', 'text-green-200');
@@ -139,113 +146,29 @@
                     box.classList.add('bg-blue-800', 'text-blue-200');
                     break;
             }
+            // Hapus pesan setelah 5 detik
             setTimeout(() => { box.classList.add('hidden'); }, 5000);
         }
 
-        /**
-         * Mengubah status loading.
-         */
-        function setLoading(isLoading) {
-            document.getElementById('loading-indicator').classList.toggle('hidden', !isLoading);
-            // Tombol hanya dinonaktifkan saat fetch pertama/manual, bukan saat interval
-            if (!refreshIntervalId) {
-                document.getElementById('fetch-button').disabled = isLoading;
-                document.getElementById('fetch-button').textContent = isLoading ? 'Memuat...' : 'Mulai Tracking';
-            }
-        }
+        function setLoading(isLoading, isInitial = true) {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const button = document.getElementById('fetch-button');
 
-        /**
-         * Logika inti untuk mengambil data status pengguna dari backend.
-         */
-        async function performFetch() {
-            const cookieInput = document.getElementById('roblox-cookie');
-            const cookie = cookieInput.value.trim();
-            const resultsContainer = document.getElementById('results-container');
+            loadingIndicator.classList.toggle('hidden', !isLoading);
             
-            // Set loading hanya pada fetch pertama kali (atau jika interval belum berjalan)
-            const isInitialFetch = refreshIntervalId === null;
-
-            if (isInitialFetch) {
-                resultsContainer.innerHTML = document.getElementById('loading-indicator').outerHTML;
-                setLoading(true);
-            }
-
-            try {
-                // Catatan: Endpoint API_URL ini harus disesuaikan dengan daftar pengguna yang ingin Anda lacak.
-                // Karena frontend tidak memiliki daftar pengguna, kita akan kirim daftar dummy (misalnya, username 'example1,example2')
-                // ATAU KITA ASUMSIKAN USER AKAN MEMASUKKAN USERNAME DARI INPUT BARU (TIDAK ADA INPUT USERNAME SAAT INI)
-                // KARENA SERVER.JS MENGHARAPKAN BODY, KITA HARUS KIRIM BODY.
-                
-                // MENGGUNAKAN DAFTAR PENGGUNA DUMMY SEMENTARA UNTUK TEST
-                // Dalam aplikasi nyata, Anda harus menambahkan input terpisah untuk daftar username
-                const DUMMY_USERS = [
-  "Taloongoodboy",
-  "Basoka001",
-  "Basooka002",
-  "Basooka003",
-  "Basooka004",
-  "nyukk1000",
-  "nyukk1002",
-  "nyukk10003",
-  "kuya0600",
-  "uubyyror",
-  "talonbaikk63",
-  "ermancing_1",
-  "Duck_CHILL37",
-  "Julian_Dawn72",
-  "NovaPrism200531",
-  "XxOw3nQu33nTurb0xX",
-  "Fr0st_TIG3R53",
-  "IsabellaFireBlade201",
-  "StormMoonGolden79"
-];
-
-                const response = await fetch(API_URL, {
-                    method: 'POST', // Menggunakan POST sesuai kebutuhan server.js
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-roblox-cookie': cookie 
-                    },
-                    body: JSON.stringify({ users: DUMMY_USERS }) // Kirim daftar pengguna di body
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Server merespons dengan status ${response.status}`);
-                }
-
-                const data = await response.json();
-                
-                // NEW: Update statistics before rendering grid
-                updateStatistics(data);
-
-                renderResults(data);
-
-            } catch (error) {
-                console.error("Fetch Error:", error);
-                showMessage(`Gagal mengambil data: ${error.message}. Cek koneksi API dan Cookie.`, 'error');
-                // Hentikan tracking jika terjadi error fetch
-                if (refreshIntervalId) {
-                    toggleTracking();
-                }
-                resultsContainer.innerHTML = '';
-            } finally {
-                if (isInitialFetch) {
-                    setLoading(false);
-                }
+            // Hanya nonaktifkan/aktifkan tombol saat fetch pertama
+            if (isInitial) {
+                button.disabled = isLoading;
+                button.textContent = isLoading ? 'Memuat...' : (refreshIntervalId ? 'Berhenti Tracking' : 'Mulai Tracking');
             }
         }
-
-        /**
-         * NEW FUNCTION: Menghitung dan memperbarui ringkasan statistik.
-         * @param {Array<object>} data Array data status pengguna.
-         */
+        
         function updateStatistics(data) {
             let totalAccounts = 0;
             let totalOnline = 0;
             let totalInGame = 0;
 
             data.forEach(user => {
-                // Hanya hitung jika tidak ada error
                 if (!user.error) {
                     totalAccounts++;
                     if (user.status === 'Online') {
@@ -260,10 +183,7 @@
             document.getElementById('stat-online').textContent = totalOnline;
             document.getElementById('stat-ingame').textContent = totalInGame;
         }
-
-        /**
-         * Membuat item kartu untuk tampilan grid.
-         */
+        
         function createResultGridItem(user) {
             if (user.error) {
                 return `
@@ -316,20 +236,14 @@
                 </div>
             `;
         }
-
-
-        /**
-         * Merender hasil ke DOM menggunakan grid layout.
-         */
+        
         function renderResults(data) {
             const resultsContainer = document.getElementById('results-container');
-            
             if (data.length === 0) {
                 resultsContainer.innerHTML = '<p class="text-gray-400 text-center p-8">Tidak ada pengguna yang dilacak.</p>';
                 return;
             }
 
-            // Grid View: Dibuat padat untuk mengakomodasi banyak akun dalam satu layar
             const gridHTML = `
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 p-1">
                     ${data.map(createResultGridItem).join('')}
@@ -339,10 +253,71 @@
             resultsContainer.innerHTML = gridHTML;
         }
 
+        // --- CORE LOGIC ---
+        
+        /**
+         * Logika inti untuk mengambil data status pengguna dari backend.
+         */
+        async function performFetch(isInitial = false) {
+            const cookie = document.getElementById('roblox-cookie').value.trim();
+            const resultsContainer = document.getElementById('results-container');
+            
+            if (isInitial) {
+                // Tampilkan loading screen hanya saat fetch pertama
+                resultsContainer.innerHTML = document.getElementById('loading-indicator').outerHTML;
+                setLoading(true, true);
+            }
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST', 
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-roblox-cookie': cookie 
+                    },
+                    body: JSON.stringify({ users: DUMMY_USERS })
+                });
+
+                // Cek status HTTP
+                if (response.status === 403) {
+                     // Error spesifik 403 Forbidden dari server.js (Cookie tidak valid)
+                    throw new Error("Cookie Roblox tidak valid atau kedaluwarsa. Mohon masukkan yang baru.");
+                }
+
+                if (!response.ok) {
+                    const errorJson = await response.json();
+                    throw new Error(errorJson.error || `Server error: Status ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                updateStatistics(data);
+                renderResults(data);
+                if (isInitial) {
+                    showMessage('Data berhasil dimuat. Tracking aktif.', 'success');
+                }
+
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                // Hentikan tracking jika terjadi error fatal
+                if (refreshIntervalId) {
+                    // Gunakan setTimeout untuk menghindari race condition saat menghentikan tracking
+                    setTimeout(() => toggleTracking(), 0); 
+                }
+                
+                resultsContainer.innerHTML = '<p class="text-red-400 text-center p-8">Gagal: ' + error.message + '</p>';
+            
+            } finally {
+                if (isInitial) {
+                    setLoading(false, true); // Pastikan tombol diaktifkan kembali
+                }
+            }
+        }
+
         /**
          * Mengaktifkan atau menonaktifkan tracking otomatis.
          */
-        function toggleTracking() {
+        async function toggleTracking() {
             const button = document.getElementById('fetch-button');
             const cookieInput = document.getElementById('roblox-cookie');
             const refreshNote = document.getElementById('status-refresh');
@@ -353,7 +328,7 @@
                 refreshIntervalId = null;
                 button.textContent = 'Mulai Tracking';
                 button.classList.replace('bg-red-600', 'bg-roblox-blue');
-                cookieInput.disabled = false; // Aktifkan input cookie lagi
+                cookieInput.disabled = false;
                 refreshNote.classList.add('hidden');
                 showMessage('Tracking dihentikan.', 'info');
             } else {
@@ -364,25 +339,32 @@
                     return;
                 }
                 
-                // Lakukan fetch pertama kali, lalu set interval
-                performFetch(); 
+                // Lakukan fetch pertama kali dengan penanda isInitial=true
+                await performFetch(true); 
                 
-                refreshIntervalId = setInterval(performFetch, REFRESH_RATE);
-                
-                button.textContent = 'Berhenti Tracking';
-                button.classList.replace('bg-roblox-blue', 'bg-red-600');
-                cookieInput.disabled = true; // Nonaktifkan input cookie saat tracking berjalan
-                refreshNote.classList.remove('hidden');
-                showMessage(`Tracking dimulai! Refresh setiap ${REFRESH_RATE / 1000} detik.`, 'success');
+                // Jika fetch pertama sukses (refreshIntervalId masih null), kita mulai interval
+                if (!refreshIntervalId) {
+                    refreshIntervalId = setInterval(performFetch, REFRESH_RATE);
+                    button.textContent = 'Berhenti Tracking';
+                    button.classList.replace('bg-roblox-blue', 'bg-red-600');
+                    cookieInput.disabled = true; 
+                    refreshNote.classList.remove('hidden');
+                    showMessage(`Tracking dimulai! Refresh setiap ${REFRESH_RATE / 1000} detik.`, 'success');
+                }
             }
         }
         
-        // Bersihkan interval saat halaman ditutup untuk mencegah memory leak
+        // Membersihkan interval saat halaman ditutup
         window.addEventListener('beforeunload', () => {
             if (refreshIntervalId) {
                 clearInterval(refreshIntervalId);
             }
         });
+
+        // Tampilkan placeholder awal
+        window.onload = () => {
+             document.getElementById('results-container').innerHTML = '<p class="text-gray-400 text-center p-8">Masukkan cookie dan klik "Mulai Tracking".</p>';
+        };
     </script>
 </body>
 </html>
