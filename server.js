@@ -1,7 +1,7 @@
 // Import Libraries
 const express = require("express");
 const axios = require("axios");
-const cors = require("cors");
+const cors = require = require("cors");
 const dotenv = require("dotenv");
 
 dotenv.config();
@@ -39,9 +39,7 @@ const getHeaders = (cookie) => {
 async function getUserIds(usernames) {
     if (usernames.length === 0) return {};
     
-    // ... (rest of getUserIds function remains the same)
-    // [Kode getUserIds sama seperti sebelumnya]
-
+    // Pecah username menjadi beberapa bagian (chunk) agar tidak melebihi batas API (maks 100)
     const chunks = [];
     for (let i = 0; i < usernames.length; i += 100) {
         chunks.push(usernames.slice(i, i + 100));
@@ -55,6 +53,7 @@ async function getUserIds(usernames) {
                 { usernames: chunk },
                 { headers: { "Content-Type": "application/json" } } // Tidak perlu cookie di sini
             );
+            // Map username (lowercase) ke User ID
             resp.data.data.forEach(user => {
                 userMap[user.name.toLowerCase()] = user.id;
             });
@@ -125,8 +124,18 @@ app.post("/api/status", async (req, res) => {
     }
     
     // 4. Gather all results (Logic sama seperti sebelumnya)
+    
+    // *** PERBAIKAN: Buat presenceMap dari array userPresences ***
+    // Ini memungkinkan pencarian status berdasarkan userId dengan cepat.
+    const presenceMap = presenceData.userPresences.reduce((map, presence) => {
+        map[presence.userId] = presence;
+        return map;
+    }, {});
+    // ************************************************************
+
     const results = [];
     
+    // Buat map kebalikan dari ID ke Username (untuk hasil akhir)
     const userIdToUsernameMap = Object.entries(userMap).reduce((acc, [username, id]) => {
         acc[id] = username;
         return acc;
@@ -150,21 +159,21 @@ app.post("/api/status", async (req, res) => {
         let lastLocation = "Offline";
 
         if (presence) {
-             // ... (Logic penentuan status sama seperti sebelumnya)
-             // [Kode penentuan status]
+            
             placeId = presence.placeId;
             universeId = presence.universeId;
             lastLocation = presence.lastLocation;
             
             if (presence.userPresenceType === 3) { // In Game
                 status = "In Game";
+                // Mengambil nama game
                 mapName = await getGameInfo(presence.universeId || presence.placeId, cookie);
                 if (!presence.placeId) {
                      mapName = "In Game (placeId hidden)";
                 }
 
             } else if (presence.userPresenceType === 2) { // In Studio
-                status = "In Game"; 
+                status = "In Studio"; 
                 mapName = "In Studio";
             }
             
